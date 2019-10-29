@@ -1,14 +1,14 @@
 import React, { Component } from 'react';
 import './App.css';
 
-import vtkActor from 'vtk.js/Sources/Rendering/Core/Actor';
-import vtkSphereSource from 'vtk.js/Sources/Filters/Sources/SphereSource';
-import vtkMapper from 'vtk.js/Sources/Rendering/Core/Mapper';
+import 'vtk.js/Sources/favicon';
+
+import vtkColorTransferFunction from 'vtk.js/Sources/Rendering/Core/ColorTransferFunction';
 import vtkFullScreenRenderWindow from 'vtk.js/Sources/Rendering/Misc/FullScreenRenderWindow';
-import vtkTubeFilter from 'vtk.js/Sources/Filters/General/TubeFilter';
-import vtkPoints from 'vtk.js/Sources/Common/Core/Points';
-import vtkPolyData from 'vtk.js/Sources/Common/DataModel/PolyData';
-import { VtkDataTypes } from 'vtk.js/Sources/Common/Core/DataArray/Constants';
+import vtkHttpDataSetReader from 'vtk.js/Sources/IO/Core/HttpDataSetReader';
+import vtkPiecewiseFunction from 'vtk.js/Sources/Common/DataModel/PiecewiseFunction';
+import vtkVolume from 'vtk.js/Sources/Rendering/Core/Volume';
+import vtkVolumeMapper from 'vtk.js/Sources/Rendering/Core/VolumeMapper';
 
 class App extends Component {
   constructor(props) {
@@ -19,158 +19,62 @@ class App extends Component {
     this.pipeline = null;
   }
 
-  createPipeline(resolution = 20) {
-    const sphereSource = vtkSphereSource.newInstance({ radius: 1.5, thetaResolution: resolution, phiResolution: resolution });
+  createPipeline(resolution = 20, renderer, renderWindow) {
+    const reader = vtkHttpDataSetReader.newInstance(); //spheresource
 
-    const atomColorR = 0.380
-    const atomColorG = 0.855
-    const atomColorB = 0.984
+    const actor = vtkVolume.newInstance();
+    const mapper = vtkVolumeMapper.newInstance();
+    mapper.setSampleDistance(0.7);
+    actor.setMapper(mapper);
 
-    const sphereMapper = vtkMapper.newInstance();
-    sphereMapper.setInputConnection(sphereSource.getOutputPort());
+    const ctfun = vtkColorTransferFunction.newInstance();
+    ctfun.addRGBPoint(200.0, 0.4, 0.2, 0.0);
+    ctfun.addRGBPoint(2000.0, 1.0, 1.0, 1.0);
+    const ofun = vtkPiecewiseFunction.newInstance();
+    ofun.addPoint(200.0, 0.0);
+    ofun.addPoint(1200.0, 0.5);
+    ofun.addPoint(3000.0, 0.8);
+    actor.getProperty().setRGBTransferFunction(0, ctfun);
+    actor.getProperty().setScalarOpacity(0, ofun);
+    actor.getProperty().setScalarOpacityUnitDistance(0, 4.5);
+    actor.getProperty().setInterpolationTypeToLinear();
+    actor.getProperty().setUseGradientOpacity(0, true);
+    actor.getProperty().setGradientOpacityMinimumValue(0, 15);
+    actor.getProperty().setGradientOpacityMinimumOpacity(0, 0.0);
+    actor.getProperty().setGradientOpacityMaximumValue(0, 100);
+    actor.getProperty().setGradientOpacityMaximumOpacity(0, 1.0);
+    actor.getProperty().setShade(true);
+    actor.getProperty().setAmbient(0.2);
+    actor.getProperty().setDiffuse(0.7);
+    actor.getProperty().setSpecular(0.3);
+    actor.getProperty().setSpecularPower(8.0);
 
-    const sphereActor = vtkActor.newInstance();
-    sphereActor.setMapper(sphereMapper);
-    sphereActor.getProperty().setColor(atomColorR, atomColorG, atomColorB)
+    mapper.setInputConnection(reader.getOutputPort());
 
 
-    const numberOfSegments = resolution;
-    let pointType = VtkDataTypes.FLOAT;
-    const tubeRadius = 5.0;
-
-    const polyDataXY = vtkPolyData.newInstance();
-    const pointsXY = vtkPoints.newInstance({ dataType: pointType });
-    pointsXY.setNumberOfPoints(numberOfSegments + 1);
-    const pointDataXY = new Float32Array(3 * (numberOfSegments + 1));
-    const vertsXY = new Uint32Array(2 * (numberOfSegments + 1));
-    const linesXY = new Uint32Array(numberOfSegments + 2);
-    linesXY[0] = numberOfSegments + 1;
-
-    for (let i = 0; i < numberOfSegments + 1; i++) {
-      for (let j = 0; j < 3; j++) {
-        const angle = i / (numberOfSegments - 1) * 2.0 * Math.PI;
-        pointDataXY[3 * i + 0] = tubeRadius * Math.cos(angle);
-        pointDataXY[3 * i + 1] = tubeRadius * Math.sin(angle);
-        pointDataXY[3 * i + 2] = 0.0;
-      }
-      vertsXY[i] = 1;
-      vertsXY[i + 1] = i;
-      linesXY[i + 1] = i;
-    }
-    pointsXY.setData(pointDataXY);
-    polyDataXY.setPoints(pointsXY);
-    polyDataXY.getVerts().setData(vertsXY);
-    polyDataXY.getLines().setData(linesXY);
-
-    const tubeFilterXY = vtkTubeFilter.newInstance();
-    tubeFilterXY.setCapping(false);
-    tubeFilterXY.setNumberOfSides(resolution);
-    tubeFilterXY.setRadius(0.5);
-
-    tubeFilterXY.setInputData(polyDataXY);
-
-    const polyDataMapperXY = vtkMapper.newInstance();
-    polyDataMapperXY.setInputData(polyDataXY);
-
-    const polyDataActorXY = vtkActor.newInstance();
-    polyDataActorXY.setMapper(polyDataMapperXY)
-
-    const tubeMapperXY = vtkMapper.newInstance();
-    tubeMapperXY.setInputConnection(tubeFilterXY.getOutputPort());
-
-    const tubeActorXY = vtkActor.newInstance();
-    tubeActorXY.setMapper(tubeMapperXY)
-    tubeActorXY.getProperty().setColor(atomColorR, atomColorG, atomColorB)
-
-    const polyDataXZ = vtkPolyData.newInstance();
-    const pointsXZ = vtkPoints.newInstance({ dataType: pointType });
-    pointsXZ.setNumberOfPoints(numberOfSegments + 1);
-    const pointDataXZ = new Float32Array(3 * (numberOfSegments + 1));
-    const vertsXZ = new Uint32Array(2 * (numberOfSegments + 1));
-    const linesXZ = new Uint32Array(numberOfSegments + 2);
-    linesXZ[0] = numberOfSegments + 1;
-
-    for (let i = 0; i < numberOfSegments + 1; i++) {
-      for (let j = 0; j < 3; j++) {
-        const angle = i / (numberOfSegments - 1) * 2.0 * Math.PI;
-        pointDataXZ[3 * i + 0] = tubeRadius * Math.cos(angle);
-        pointDataXZ[3 * i + 1] = 0.0;
-        pointDataXZ[3 * i + 2] = tubeRadius * Math.sin(angle);
-      }
-      vertsXZ[i] = 1;
-      vertsXZ[i + 1] = i;
-      linesXZ[i + 1] = i;
-    }
-    pointsXZ.setData(pointDataXZ);
-    polyDataXZ.setPoints(pointsXZ);
-    polyDataXZ.getVerts().setData(vertsXZ);
-    polyDataXZ.getLines().setData(linesXZ);
-
-    const tubeFilterXZ = vtkTubeFilter.newInstance();
-    tubeFilterXZ.setCapping(false);
-    tubeFilterXZ.setNumberOfSides(resolution);
-    tubeFilterXZ.setRadius(0.5);
-
-    tubeFilterXZ.setInputData(polyDataXZ);
-
-    const polyDataMapperXZ = vtkMapper.newInstance();
-    polyDataMapperXZ.setInputData(polyDataXZ);
-
-    const polyDataActorXZ = vtkActor.newInstance();
-    polyDataActorXZ.setMapper(polyDataMapperXZ)
-
-    const tubeMapperXZ = vtkMapper.newInstance();
-    tubeMapperXZ.setInputConnection(tubeFilterXZ.getOutputPort());
-
-    const tubeActorXZ = vtkActor.newInstance();
-    tubeActorXZ.setMapper(tubeMapperXZ)
-    tubeActorXZ.getProperty().setColor(atomColorR, atomColorG, atomColorB)
-
-    const polyDataYZ = vtkPolyData.newInstance();
-    const pointsYZ = vtkPoints.newInstance({ dataType: pointType });
-    pointsYZ.setNumberOfPoints(numberOfSegments + 1);
-    const pointDataYZ = new Float32Array(3 * (numberOfSegments + 1));
-    const vertsYZ = new Uint32Array(2 * (numberOfSegments + 1));
-    const linesYZ = new Uint32Array(numberOfSegments + 2);
-    linesYZ[0] = numberOfSegments + 1;
-
-    for (let i = 0; i < numberOfSegments + 1; i++) {
-      for (let j = 0; j < 3; j++) {
-        const angle = i / (numberOfSegments - 1) * 2.0 * Math.PI;
-        pointDataYZ[3 * i + 0] = 0.0;
-        pointDataYZ[3 * i + 1] = tubeRadius * Math.cos(angle);
-        pointDataYZ[3 * i + 2] = tubeRadius * Math.sin(angle);
-      }
-      vertsYZ[i] = 1;
-      vertsYZ[i + 1] = i;
-      linesYZ[i + 1] = i;
-    }
-    pointsYZ.setData(pointDataYZ);
-    polyDataYZ.setPoints(pointsYZ);
-    polyDataYZ.getVerts().setData(vertsYZ);
-    polyDataYZ.getLines().setData(linesYZ);
-
-    const tubeFilterYZ = vtkTubeFilter.newInstance();
-    tubeFilterYZ.setCapping(false);
-    tubeFilterYZ.setNumberOfSides(resolution);
-    tubeFilterYZ.setRadius(0.5);
-
-    tubeFilterYZ.setInputData(polyDataYZ);
-
-    const polyDataMapperYZ = vtkMapper.newInstance();
-    polyDataMapperYZ.setInputData(polyDataYZ);
-
-    const polyDataActorYZ = vtkActor.newInstance();
-    polyDataActorYZ.setMapper(polyDataMapperYZ)
-
-    const tubeMapperYZ = vtkMapper.newInstance();
-    tubeMapperYZ.setInputConnection(tubeFilterYZ.getOutputPort());
-
-    const tubeActorYZ = vtkActor.newInstance();
-    tubeActorYZ.setMapper(tubeMapperYZ)
-    tubeActorYZ.getProperty().setColor(atomColorR, atomColorG, atomColorB)
-
-    return { sphereMapper, sphereActor, tubeActorXY, tubeMapperXY, tubeActorXZ, tubeMapperXZ, tubeActorYZ, tubeMapperYZ };
+    reader
+        .setUrl(
+            'https://data.kitware.com/api/v1/file/58e79a8b8d777f16d095fcd7/download',
+            { fullPath: true, compression: 'zip', loadData: true }
+        )
+        .then(() => {
+          renderer.addVolume(actor);
+          renderer.resetCamera();
+          renderer.getActiveCamera().zoom(1.5);
+          renderer.getActiveCamera().elevation(70);
+          renderer.updateLightsGeometryToFollowCamera();
+          renderWindow.render();
+          // now that the small dataset is loaded we pull down the
+          // full resolution 256x256x91 dataset
+          reader
+              .setUrl(
+                  'https://data.kitware.com/api/v1/file/58e665158d777f16d095fc2e/download',
+                  { fullPath: true, compression: 'zip', loadData: true }
+              )
+              .then(() => {
+                renderWindow.render();
+              });
+        });
   }
 
   updatePipeline() {
@@ -183,25 +87,12 @@ class App extends Component {
     }
 
     const resolution = this.props.resolution || 40
-    this.pipeline = this.createPipeline(resolution);
-    const pipeline = this.pipeline
-    renderer.addActor(pipeline.sphereActor);
-    renderer.addActor(pipeline.tubeActorXY);
-    renderer.addActor(pipeline.tubeActorXZ);
-    renderer.addActor(pipeline.tubeActorYZ);
-    renderer.resetCamera();
+    this.pipeline = this.createPipeline(resolution, renderer, renderWindow);
     renderWindow.render();
 
     const camera = renderer.getActiveCamera();
     camera.elevation(30.)
     camera.azimuth(30.)
-
-    setInterval(function() {
-      pipeline.tubeActorXY.rotateX(2.)
-      pipeline.tubeActorXZ.rotateZ(3.)
-      pipeline.tubeActorYZ.rotateY(5.)
-      renderWindow.render();
-    }, 100)
 
     window.pipeline = this.pipeline;
 
@@ -210,10 +101,9 @@ class App extends Component {
 
   componentDidMount() {
     this.fullScreenRenderer = vtkFullScreenRenderWindow.newInstance({
-      background: [0.157, 0.172, 0.204],
-      rootContainer: this.container.current,
-      containerStyle: {},
+      background: [0, 0, 0],
     });
+
     this.updatePipeline();
   }
 
